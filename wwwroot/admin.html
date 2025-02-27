@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airbnb Lite - Admin Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="modern-header">
+        <div class="nav-container">
+            <h1 class="logo">Airbnb Admin</h1>
+            <nav class="nav-links">
+                <button class="nav-btn" onclick="window.location.href='/main.html'">Dashboard</button>
+                <button class="nav-btn logout-btn" onclick="logout()">Logout</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="admin-dashboard">
+        <section class="admin-controls">
+            <h2>Admin Panel</h2>
+            <div class="control-buttons">
+                <button class="control-btn" onclick="loadAllUsers()">Users</button>
+                <button class="control-btn" onclick="loadAllListings()">Listings</button>
+                <button class="control-btn" onclick="loadAllBookings()">Bookings</button>
+            </div>
+        </section>
+        <section class="admin-content">
+            <div id="admin-content" class="table-container"></div>
+        </section>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/index.html';
+
+        window.onload = async () => {
+            const response = await fetch('/api/users/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const user = await response.json();
+            if (!user.roles || !user.roles.includes("Admin")) {
+                window.location.href = '/main.html';
+            }
+        };
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/index.html';
+        }
+
+        async function loadAllUsers() {
+            const response = await fetch('/api/admin/users', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const users = await response.json();
+            if (response.ok) {
+                document.getElementById('admin-content').innerHTML = `
+                    <table class="admin-table">
+                        <thead>
+                            <tr><th>ID</th><th>Email</th><th>Name</th><th>Roles</th></tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(u => `<tr><td>${u.id}</td><td>${u.email}</td><td>${u.name}</td><td>${u.roles}</td></tr>`).join('')}
+                        </tbody>
+                    </table>`;
+            } else {
+                document.getElementById('admin-content').innerHTML = `<p class="error">Failed: ${await response.text()}</p>`;
+            }
+        }
+
+        async function loadAllListings() {
+            const response = await fetch('/api/listings/all', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const listings = await response.json();
+            if (response.ok) {
+                document.getElementById('admin-content').innerHTML = `
+                    <table class="admin-table">
+                        <thead>
+                            <tr><th>ID</th><th>Title</th><th>Description</th><th>Price</th><th>Owner</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            ${listings.map(l => `
+                                <tr id="listing-row-${l.id}">
+                                    <td>${l.id}</td>
+                                    <td><input type="text" value="${l.title}" id="title-${l.id}"></td>
+                                    <td><textarea id="desc-${l.id}">${l.description}</textarea></td>
+                                    <td><input type="number" value="${l.pricePerNight}" id="price-${l.id}"></td>
+                                    <td>${l.ownerEmail} (#${l.ownerId})</td>
+                                    <td>
+                                        <button class="action-btn save-btn" onclick="adminUpdateListing(${l.id})">Save</button>
+                                        <button class="action-btn delete-btn" onclick="adminDeleteListing(${l.id})">Delete</button>
+                                    </td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>`;
+            } else {
+                document.getElementById('admin-content').innerHTML = `<p class="error">Failed: ${await response.text()}</p>`;
+            }
+        }
+
+        async function loadAllBookings() {
+            const response = await fetch('/api/bookings/all', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const bookings = await response.json();
+            if (response.ok) {
+                document.getElementById('admin-content').innerHTML = `
+                    <table class="admin-table">
+                        <thead>
+                            <tr><th>ID</th><th>Listing</th><th>User</th><th>Start</th><th>End</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            ${bookings.map(b => `
+                                <tr id="booking-row-${b.id}">
+                                    <td>${b.id}</td>
+                                    <td>${b.listingTitle} (#${b.listingId})</td>
+                                    <td>${b.userEmail} (#${b.userId})</td>
+                                    <td><input type="date" value="${b.startDate.split('T')[0]}" id="start-${b.id}"></td>
+                                    <td><input type="date" value="${b.endDate.split('T')[0]}" id="end-${b.id}"></td>
+                                    <td>
+                                        <button class="action-btn save-btn" onclick="adminUpdateBooking(${b.id})">Save</button>
+                                        <button class="action-btn delete-btn" onclick="adminCancelBooking(${b.id})">Cancel</button>
+                                    </td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>`;
+            } else {
+                document.getElementById('admin-content').innerHTML = `<p class="error">Failed: ${await response.text()}</p>`;
+            }
+        }
+
+        async function adminUpdateListing(listingId) {
+            const title = document.getElementById(`title-${listingId}`).value;
+            const description = document.getElementById(`desc-${listingId}`).value;
+            const pricePerNight = parseFloat(document.getElementById(`price-${listingId}`).value) || 0;
+
+            if (!title || !description || pricePerNight <= 0) {
+                alert("Please fill in all fields with valid values");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/listings/${listingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ id: listingId, title, description, pricePerNight })
+                });
+                if (!response.ok) throw new Error(`Edit failed: ${response.status} - ${await response.text()}`);
+                await loadAllListings();
+                alert("Listing updated successfully!");
+            } catch (error) {
+                alert(`Failed to update listing: ${error.message}`);
+            }
+        }
+
+        async function adminDeleteListing(listingId) {
+            if (!confirm("Are you sure you want to delete this listing?")) return;
+            try {
+                const response = await fetch(`/api/listings/${listingId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error(`Delete failed: ${response.status}`);
+                await loadAllListings();
+                alert("Listing deleted successfully!");
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function adminUpdateBooking(bookingId) {
+            const startDate = document.getElementById(`start-${bookingId}`).value;
+            const endDate = document.getElementById(`end-${bookingId}`).value;
+            if (!startDate || !endDate) return alert("Please fill in both dates");
+
+            try {
+                const response = await fetch(`/api/bookings/${bookingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ listingId: bookingId, startDate, endDate })
+                });
+                if (!response.ok) throw new Error(`Edit failed: ${response.status} - ${await response.text()}`);
+                await loadAllBookings();
+                alert("Booking updated successfully!");
+            } catch (error) {
+                alert(`Failed to update booking: ${error.message}`);
+            }
+        }
+
+        async function adminCancelBooking(bookingId) {
+            if (!confirm("Are you sure you want to cancel this booking?")) return;
+            try {
+                const response = await fetch(`/api/bookings/${bookingId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error(`Failed to cancel booking: ${response.status}`);
+                await loadAllBookings();
+                alert("Booking canceled successfully!");
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

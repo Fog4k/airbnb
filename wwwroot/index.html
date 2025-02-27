@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airbnb Lite</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">Airbnb</div>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li id="explore-link"><a href="/main.html">Explore</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section id="home" class="hero">
+        <h1>Find Your Dream Stay</h1>
+        <p>Discover unique places with a seamless experience.</p>
+        <button onclick="scrollToAuth()">Get Started</button>
+    </section>
+
+    <section id="auth" class="auth-section">
+        <h2>Join Us</h2>
+        <div class="auth-container" id="auth-container">
+            <div class="auth-card" id="register-form">
+                <h3>Register</h3>
+                <input id="reg-email" class="input-field" placeholder="Email" required>
+                <input id="reg-password" type="password" class="input-field" placeholder="Password" required>
+                <input id="reg-name" class="input-field" placeholder="Name" required>
+                <div class="auth-buttons">
+                    <button class="auth-btn" onclick="register()">Register</button>
+                    <button class="auth-btn switch-btn" onclick="toggleAuth('login')">Login</button>
+                    <button class="auth-btn switch-btn" onclick="toggleAuth('forgot')">Forgot Password</button>
+                </div>
+            </div>
+            <div class="auth-card" id="login-form" style="display: none;">
+                <h3>Login</h3>
+                <input id="login-email" class="input-field" placeholder="Email" required>
+                <input id="login-password" type="password" class="input-field" placeholder="Password" required>
+                <div class="auth-buttons">
+                    <button class="auth-btn" onclick="login()">Login</button>
+                    <button class="auth-btn switch-btn" onclick="toggleAuth('register')">Register</button>
+                    <button class="auth-btn switch-btn" onclick="toggleAuth('forgot')">Forgot Password</button>
+                </div>
+            </div>
+            <div class="auth-card" id="forgot-form" style="display: none;">
+                <h3>Forgot Password</h3>
+                <input id="forgot-email" class="input-field" placeholder="Enter your email" required>
+                <button class="auth-btn" onclick="requestResetCode()">Send Reset Code</button>
+                <input id="reset-code" class="input-field" placeholder="Enter reset code" required>
+                <input id="reset-password" type="password" class="input-field" placeholder="New Password" required>
+                <div class="auth-buttons">
+                    <button class="auth-btn" onclick="resetPassword()">Reset Password</button>
+                    <button class="auth-btn switch-btn" onclick="toggleAuth('login')">Back to Login</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="explore" class="explore-section">
+        <h2>Top Destinations</h2>
+        <div class="cards" id="top-listings"></div>
+    </section>
+
+    <footer>
+        <p>© 2025 Airbnb Lite. All rights reserved.</p>
+    </footer>
+
+    <script>
+        const token = localStorage.getItem('token');
+
+        // Проверяем токен и управляем доступностью Explore
+        const exploreLink = document.getElementById('explore-link');
+        if (!token) {
+            exploreLink.style.pointerEvents = 'none';
+            exploreLink.style.opacity = '0.5';
+            exploreLink.querySelector('a').addEventListener('click', (e) => {
+                e.preventDefault();
+                alert('Please log in to explore listings.');
+            });
+        } else {
+            exploreLink.style.pointerEvents = 'auto';
+            exploreLink.style.opacity = '1';
+        }
+
+        async function register() {
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value.trim();
+            const name = document.getElementById('reg-name').value.trim();
+
+            if (!email || !password || !name) return alert('Please fill in all fields: Email, Password, and Name');
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailPattern.test(email)) return alert('Please enter a valid email');
+            if (password.length < 6) return alert('Password must be at least 6 characters');
+
+            try {
+                const response = await fetch('/api/users/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, name })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    window.location.href = '/main.html';
+                } else {
+                    alert('Registration failed: ' + (data.message || await response.text()));
+                }
+            } catch (error) {
+                alert('Error during registration: ' + error.message);
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+
+            if (!email || !password) return alert('Please fill in Email and Password');
+            try {
+                const response = await fetch('/api/users/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    window.location.href = '/main.html';
+                } else {
+                    alert('Login failed: ' + (data.message || 'Invalid credentials'));
+                }
+            } catch (error) {
+                alert('Error during login: ' + error.message);
+            }
+        }
+
+        async function requestResetCode() {
+            const email = document.getElementById('forgot-email').value.trim();
+            if (!email) return alert('Please enter your email');
+            try {
+                const response = await fetch('/api/users/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const message = await response.text();
+                if (response.ok) {
+                    alert('Reset code sent to your email! Check your inbox.');
+                } else {
+                    alert('Failed to send reset code: ' + message);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function resetPassword() {
+            const email = document.getElementById('forgot-email').value.trim();
+            const code = document.getElementById('reset-code').value.trim();
+            const newPassword = document.getElementById('reset-password').value.trim();
+            if (!email || !code || !newPassword) return alert('Please fill in all fields');
+            if (newPassword.length < 6) return alert('New password must be at least 6 characters');
+            try {
+                const response = await fetch('/api/users/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code, newPassword })
+                });
+                const message = await response.text();
+                if (response.ok) {
+                    alert('Password reset successfully! Please login with your new password.');
+                    toggleAuth('login');
+                } else {
+                    alert('Failed to reset password: ' + message);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function toggleAuth(form) {
+            const registerForm = document.getElementById('register-form');
+            const loginForm = document.getElementById('login-form');
+            const forgotForm = document.getElementById('forgot-form');
+            registerForm.style.display = 'none';
+            loginForm.style.display = 'none';
+            forgotForm.style.display = 'none';
+            if (form === 'login') loginForm.style.display = 'block';
+            else if (form === 'register') registerForm.style.display = 'block';
+            else if (form === 'forgot') forgotForm.style.display = 'block';
+        }
+
+        async function loadTopListings() {
+            try {
+                const response = await fetch('/api/listings/search?limit=3');
+                const listings = await response.json();
+                const div = document.getElementById('top-listings');
+                div.innerHTML = listings.map(l => `
+                    <div class="card">
+                        <div class="card-image" style="background-image: url(${l.photoUrl || '/default-listing.jpg'})"></div>
+                        <h3>${l.title}</h3>
+                        <p>$${l.pricePerNight}/night</p>
+                    </div>
+                `).join('');
+                gsap.utils.toArray(".card").forEach((card, i) => {
+                    gsap.from(card, {
+                        scrollTrigger: { trigger: card, start: "top 80%" },
+                        opacity: 0,
+                        y: 50,
+                        duration: 0.8,
+                        delay: i * 0.2,
+                        ease: "power2.out"
+                    });
+                });
+            } catch (error) {
+                document.getElementById('top-listings').innerHTML = '<p>Unable to load listings</p>';
+            }
+        }
+
+        function scrollToAuth() {
+            document.getElementById('auth').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        window.onload = () => {
+            loadTopListings();
+            gsap.from(".hero h1", { duration: 1, y: -50, opacity: 0, ease: "power2.out" });
+            gsap.from(".hero p", { duration: 1, delay: 0.3, y: -30, opacity: 0, ease: "power2.out" });
+            gsap.from(".hero button", { duration: 1, delay: 0.6, y: -20, opacity: 0, ease: "power2.out" });
+            gsap.from(".auth-card", { scrollTrigger: { trigger: ".auth-section", start: "top 80%" }, opacity: 0, y: 50, duration: 0.8, ease: "power2.out" });
+        };
+    </script>
+</body>
+</html>

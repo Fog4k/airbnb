@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airbnb Lite - My Bookings</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+</head>
+<body>
+    <header class="modern-header">
+        <div class="nav-container">
+            <h1 class="logo">Airbnb</h1>
+            <nav class="nav-links">
+                <button class="nav-btn" onclick="window.location.href='/main.html'">Dashboard</button>
+                <button class="nav-btn" onclick="window.location.href='/admin.html'">Admin</button>
+                <button class="nav-btn logout-btn" onclick="logout()">Logout</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="dashboard">
+        <section class="bookings-card">
+            <h2>My Bookings</h2>
+            <div id="bookings-list" class="bookings-container">Loading...</div>
+        </section>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/index.html';
+
+        window.onload = async () => {
+            await loadBookings();
+        };
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/index.html';
+        }
+
+        async function loadBookings() {
+            try {
+                const response = await fetch('/api/bookings', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error(`Failed to load bookings: ${response.status}`);
+                const bookings = await response.json();
+
+                const div = document.getElementById('bookings-list');
+                if (bookings.length === 0) {
+                    div.innerHTML = '<p class="no-results">No bookings found.</p>';
+                    return;
+                }
+
+                div.innerHTML = bookings.map(b => `
+                    <div class="booking-card" id="booking-${b.id}">
+                        <h3>${b.listingTitle} (ID: ${b.id})</h3>
+                        <p><strong>Start Date:</strong> <input type="date" class="edit-date" value="${b.startDate.split('T')[0]}" /></p>
+                        <p><strong>End Date:</strong> <input type="date" class="edit-date" value="${b.endDate.split('T')[0]}" /></p>
+                        <button class="action-btn save-btn" onclick="saveBookingEdit(${b.id})">Save</button>
+                        <button class="action-btn delete-btn" onclick="cancelBooking(${b.id})">Cancel</button>
+                    </div>
+                `).join('');
+
+                gsap.utils.toArray(".booking-card").forEach((card, i) => {
+                    gsap.from(card, {
+                        scrollTrigger: { trigger: card, start: "top 80%" },
+                        opacity: 0,
+                        y: 50,
+                        duration: 0.8,
+                        delay: i * 0.2,
+                        ease: "power2.out"
+                    });
+                });
+            } catch (error) {
+                document.getElementById('bookings-list').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        }
+
+        async function saveBookingEdit(bookingId) {
+            const card = document.getElementById(`booking-${bookingId}`);
+            const startDate = card.querySelector('.edit-date:nth-child(2) input').value;
+            const endDate = card.querySelector('.edit-date:nth-child(3) input').value;
+
+            if (!startDate || !endDate) return alert("Please fill in both dates");
+
+            try {
+                const response = await fetch(`/api/bookings/${bookingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ listingId: parseInt(bookingId), startDate, endDate })
+                });
+                if (!response.ok) throw new Error(`Edit failed: ${response.status} - ${await response.text()}`);
+                await loadBookings();
+                alert("Booking updated successfully!");
+            } catch (error) {
+                alert(`Failed to update booking: ${error.message}`);
+            }
+        }
+
+        async function cancelBooking(bookingId) {
+            if (!confirm("Are you sure you want to cancel this booking?")) return;
+            try {
+                const response = await fetch(`/api/bookings/${bookingId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error(`Failed to cancel booking: ${response.status}`);
+                await loadBookings();
+                alert("Booking canceled successfully!");
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
